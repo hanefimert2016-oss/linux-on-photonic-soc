@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Build artefacts
+build/
+dump.vcd
+*.vvp
+*.fst
+
+# LiteX/Verilator local checkouts
+build/litex/
+images/*.zip
+
+# Pre-built Linux/OpenSBI images (fetched by scripts/fetch_images.sh)
+images/Image
+images/opensbi.bin
+images/rv32.dtb
+images/rootfs.cpio
+
+# Editor cruft
+.vscode/
+.idea/
+*.swp
+.DS_Store

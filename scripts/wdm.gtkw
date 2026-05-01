@@ -1,0 +1,55 @@
+[*]
+[*] GTKWave Analyzer save file for the photonic-inspired WDM fabric.
+[*] Open with: gtkwave dump.vcd scripts/wdm.gtkw
+[*]
+[dumpfile] "dump.vcd"
+[savefile] "scripts/wdm.gtkw"
+[timestart] 0
+[size] 1600 900
+[pos] -1 -1
+*-15 0 -1 -1 -1 -1 -1 -1
+[treeopen] wdm_tb.
+[sst_width] 260
+[signals_width] 260
+[sst_expanded] 1
+[sst_vpaned_height] 280
+@28
+wdm_tb.clk
+wdm_tb.rst
+wdm_tb.enable
+@200
+-Scheduler
+@22
+wdm_tb.cycle_counter[31:0]
+@200
+-Wavelength channels (TX side)
+@22
+wdm_tb.lambda0_tx[31:0]
+wdm_tb.lambda1_tx[31:0]
+wdm_tb.lambda2_tx[31:0]
+wdm_tb.lambda3_tx[31:0]
+wdm_tb.lambda4_tx[31:0]
+wdm_tb.lambda5_tx[31:0]
+wdm_tb.lambda6_tx[31:0]
+wdm_tb.lambda7_tx[31:0]
+@200
+-Wavelength channels (RX side)
+@22
+wdm_tb.lambda0_rx[31:0]
+wdm_tb.lambda1_rx[31:0]
+wdm_tb.lambda2_rx[31:0]
+wdm_tb.lambda3_rx[31:0]
+wdm_tb.lambda4_rx[31:0]
+wdm_tb.lambda5_rx[31:0]
+wdm_tb.lambda6_rx[31:0]
+wdm_tb.lambda7_rx[31:0]
+@200
+-Aggregate / health
+@28
+wdm_tb.tx_valid[7:0]
+wdm_tb.rx_valid[7:0]
+wdm_tb.lambda_active[7:0]
+@22
+wdm_tb.total_words[31:0]
+[pattern_trace] 1
+[pattern_trace] 0
