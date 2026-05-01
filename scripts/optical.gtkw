@@ -1,5 +1,8 @@
 [*]
 [*] GTKWave Analyzer save file for the photon-pure optical link.
+[*] Real-valued optical intensities are pre-configured as analog
+[*] interpolated traces so the waveform pops open as actual light
+[*] flowing through the chain — no manual format toggling needed.
 [*]
 [dumpfile] "dump_optical.vcd"
 [savefile] "scripts/optical.gtkw"
@@ -23,9 +26,8 @@ optical_link_tb.tx_data[7:0]
 optical_link_tb.rx_data[7:0]
 optical_link_tb.error_per_lambda[7:0]
 @28
-@420
 -DFB lasers (continuous wave outputs)
-@420
+@18029
 optical_link_tb.laser0
 optical_link_tb.laser1
 optical_link_tb.laser2
@@ -36,14 +38,14 @@ optical_link_tb.laser6
 optical_link_tb.laser7
 @28
 -Modulator outputs (NRZ amplitude per lambda)
-@420
+@18029
 optical_link_tb.mod0
 optical_link_tb.mod1
 optical_link_tb.mod2
 optical_link_tb.mod7
 @28
 -Wavelength bus (after MUX, after waveguide, after noise)
-@420
+@18029
 optical_link_tb.bus0
 optical_link_tb.bus7
 optical_link_tb.bus_total
@@ -53,14 +55,14 @@ optical_link_tb.after_noise0
 optical_link_tb.after_noise7
 @28
 -AWG demux outputs (per-lambda recovered light)
-@420
+@18029
 optical_link_tb.port0
 optical_link_tb.port1
 optical_link_tb.port2
 optical_link_tb.port7
 @28
 -TIA voltages (after photodetector + amplifier)
-@420
+@18029
 optical_link_tb.tia0
 optical_link_tb.tia7
 @28
