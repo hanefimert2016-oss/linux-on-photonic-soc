@@ -1,0 +1,72 @@
+[*]
+[*] GTKWave Analyzer save file for the photon-pure optical link.
+[*]
+[dumpfile] "dump_optical.vcd"
+[savefile] "scripts/optical.gtkw"
+[timestart] 0
+[size] 1600 900
+[pos] -1 -1
+*-9.0 0 -1 -1 -1 -1 -1 -1 -1
+[treeopen] optical_link_tb.
+[sst_width] 280
+[signals_width] 320
+[sst_expanded] 1
+[sst_vpaned_height] 350
+@28
+optical_link_tb.clk
+optical_link_tb.rst
+optical_link_tb.laser_enable
+optical_link_tb.rx_enable
+optical_link_tb.cdr_locked
+@22
+optical_link_tb.tx_data[7:0]
+optical_link_tb.rx_data[7:0]
+optical_link_tb.error_per_lambda[7:0]
+@28
+@420
+-DFB lasers (continuous wave outputs)
+@420
+optical_link_tb.laser0
+optical_link_tb.laser1
+optical_link_tb.laser2
+optical_link_tb.laser3
+optical_link_tb.laser4
+optical_link_tb.laser5
+optical_link_tb.laser6
+optical_link_tb.laser7
+@28
+-Modulator outputs (NRZ amplitude per lambda)
+@420
+optical_link_tb.mod0
+optical_link_tb.mod1
+optical_link_tb.mod2
+optical_link_tb.mod7
+@28
+-Wavelength bus (after MUX, after waveguide, after noise)
+@420
+optical_link_tb.bus0
+optical_link_tb.bus7
+optical_link_tb.bus_total
+optical_link_tb.after_wg0
+optical_link_tb.after_wg7
+optical_link_tb.after_noise0
+optical_link_tb.after_noise7
+@28
+-AWG demux outputs (per-lambda recovered light)
+@420
+optical_link_tb.port0
+optical_link_tb.port1
+optical_link_tb.port2
+optical_link_tb.port7
+@28
+-TIA voltages (after photodetector + amplifier)
+@420
+optical_link_tb.tia0
+optical_link_tb.tia7
+@28
+-BER monitor
+@22
+optical_link_tb.total_bits[31:0]
+optical_link_tb.error_bits[31:0]
+[pattern_trace] 1
+[pattern_trace] 0

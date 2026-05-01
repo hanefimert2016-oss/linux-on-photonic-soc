@@ -110,9 +110,65 @@ At the defaults, 256 cycles × 8 lambdas → 2048 32-bit words written into the
 fabric, and the testbench fails the run if it sees fewer than `(SIM_CYCLES-4)
 × NUM_LAMBDAS` (i.e. it tolerates the 4-cycle reset / enable ramp).
 
-## FPGA portability
+## Photon-pure optical link
 
-The HDL is plain Verilog-2001 with no vendor-specific constructs:
+The optical link in [`rtl/optical/`](../rtl/optical/) is a separate,
+self-contained behavioural model. It is **not** wired into the LiteX SoC —
+it is an Icarus-only testbench so you can read the RTL, follow the photonic
+chain end-to-end and watch real-valued waveforms in GTKWave.
+
+### Module list (16 files)
+
+| File                    | Models                                              |
+|-------------------------|-----------------------------------------------------|
+| `optical_constants.vh`  | normalised parameters: powers, losses, threshold     |
+| `dfb_laser.v`           | one DFB laser at one fixed wavelength (CW)          |
+| `laser_array.v`         | bank of N DFB lasers (one per λ_k)                  |
+| `mz_modulator.v`        | Mach-Zehnder data modulator                          |
+| `ring_modulator.v`      | microring data modulator (alternative)              |
+| `modulator_bank.v`      | N-lane modulator bank                                |
+| `wavelength_mux.v`      | combines N λs onto one waveguide bus                 |
+| `optical_waveguide.v`   | silicon waveguide, attenuation + 1-cycle delay       |
+| `awg_demux.v`           | arrayed waveguide grating, 1→N split + crosstalk     |
+| `ring_drop_filter.v`    | microring drop filter (alternative demux primitive) |
+| `photodetector.v`       | Ge-on-Si PD + slicer                                 |
+| `tia_amplifier.v`       | transimpedance amplifier                             |
+| `detector_bank.v`       | N-lane PD + TIA bank                                 |
+| `cdr_recovery.v`        | clock-and-data recovery, 3-stage                     |
+| `ber_counter.v`         | bit-error-rate counter                               |
+| `noise_source.v`        | shot/thermal noise injector                          |
+| `optical_link_top.v`    | top-level integration                                |
+
+### How the analog signal is carried
+
+iverilog (and Verilator) cannot reliably propagate unpacked arrays of `real`
+through module ports. Each per-lambda intensity is therefore packed into 64
+bits using `$realtobits` and passed as a `[NUM_LAMBDAS*64-1:0]` bit vector.
+At every consumer, `$bitstoreal` decodes it back to a `real`. This keeps
+the analog precision intact end-to-end and lets the optical bus look like
+any other digital wire to the simulator.
+
+### Default parameters
+
+| Parameter        | Default | Meaning                                      |
+|------------------|---------|----------------------------------------------|
+| `NUM_LAMBDAS`    | 8       | number of DFB lasers (= wavelength channels) |
+| `LASER_POWER`    | 1.0     | normalised CW power per laser                |
+| `MOD_ER`         | 0.05    | modulator extinction ratio (bit-0 leakage)   |
+| `WG_LOSS`        | 0.95    | waveguide power transmission per hop         |
+| `MUX_LOSS`       | 0.92    | wavelength MUX insertion loss                |
+| `DEMUX_LOSS`     | 0.88    | AWG demux insertion loss                     |
+| `CROSSTALK`      | 0.005   | inter-lambda leakage at the demux            |
+| `PD_THRESHOLD`   | 0.40    | photodetector slicer decision threshold      |
+
+At these defaults the testbench reports **0 errors / 3968 PRBS bits** with
+the CDR locked, demonstrating bit-perfect end-to-end recovery through the
+full photonic chain (laser → mux → waveguide → noise → demux → PD → CDR).
+
+## FPGA portability of the digital WDM fabric
+
+The HDL in [`rtl/wdm_fabric.v`](../rtl/wdm_fabric.v) is plain Verilog-2001
+with no vendor-specific constructs:
 
 * No DSP-block primitives.
 * No instantiated SerDes / GTH / GTH4 / etc.
@@ -124,22 +180,30 @@ Sipeed-Tang, Ulx3s, …). The LiteX SoC scaffolding around it is identical to
 the upstream `linux-on-litex-vexriscv` design, so the same bitstream that
 boots Linux on those boards can carry the WDM fabric as an extra peripheral.
 
+The optical link in `rtl/optical/` is **not** synthesisable — it uses
+`$realtobits`/`$bitstoreal` and `real`-typed wires that exist only in
+simulation. That is intentional: it is an *educational* model of the
+photonic chain, not an FPGA target.
+
 ## Why this isn't (and doesn't pretend to be) a real photonic chip
 
 A real WDM photonic interconnect needs:
 
-| Component                          | Realised here?       |
-|------------------------------------|----------------------|
-| Multi-wavelength laser source       | ❌ no — pure RTL    |
-| Mach-Zehnder / ring modulators      | ❌ no               |
-| Waveguide                           | ❌ no — bus wires   |
-| Wavelength (de)multiplexer (AWG)   | ❌ no               |
-| Photodetector + TIA per channel    | ❌ no               |
+| Component                          | Realised here?                          |
+|------------------------------------|-----------------------------------------|
+| Multi-wavelength laser source       | ✅ behavioural (DFB array, real-valued) |
+| Mach-Zehnder / ring modulators      | ✅ behavioural (MZ + ring variants)     |
+| Waveguide                           | ✅ behavioural (loss + delay)           |
+| Wavelength (de)multiplexer (AWG)    | ✅ behavioural (with crosstalk)         |
+| Photodetector + TIA per channel     | ✅ behavioural (slicer + analog gain)   |
+| Real silicon fabrication            | ❌ no — that requires a fab             |
+| GHz wall-clock symbol rate          | ❌ no — simulation runs at ~kHz–MHz     |
 | **Architectural pattern: N independent parallel lanes** | ✅ yes |
 | **Throughput scales linearly with N** | ✅ yes |
-| **Synthesisable, FPGA-portable**   | ✅ yes              |
+| **Synthesisable digital fabric (rtl/wdm_fabric.v)** | ✅ yes |
 
-The repository's value is the last three rows. If you ever do tape out a
-photonic ASIC, the digital "fabric" side of it would look very much like
-[`rtl/wdm_fabric.v`](../rtl/wdm_fabric.v) — that is the part Verilog can
-genuinely express.
+The repository's value is the architectural-fidelity rows. If you ever do
+tape out a photonic ASIC, the digital "fabric" side of it would look very
+much like [`rtl/wdm_fabric.v`](../rtl/wdm_fabric.v) and the optical chain
+would look like [`rtl/optical/`](../rtl/optical/) — what is missing
+between them is the silicon-photonic process itself.

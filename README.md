@@ -1,32 +1,89 @@
 # Linux on a Photonic-Inspired RISC-V SoC
 
 A reproducible, open-source RISC-V System-on-Chip that **boots BuildRoot Linux
-under a software simulator on a stock Linux PC** and ships with a
-**photonic-inspired wavelength-division-multiplexed (WDM) data fabric** as a
-behavioral RTL model.
+under a software simulator on a stock Linux PC**, alongside a
+**photon-pure optical link** (multiple DFB lasers, modulators, AWG demux,
+photodetectors, TIA, CDR, BER counter) modelled in real-valued behavioural
+Verilog.
 
-The intent of this repo is to bridge two ideas:
+The repo bundles three layers that fit together:
 
-1. *"Light-based architectures get GHz throughput by sending data on many
-   independent optical wavelengths in parallel through the same waveguide."* —
-   We model that **architectural** property in synthesizable Verilog: many
-   independent channels operating in parallel on a shared bus, scaling
-   throughput linearly with the number of channels.
-2. *"Can we still actually run real software on it?"* — Yes. The same
-   repository builds a full Linux-capable RISC-V SoC (VexRiscv-SMP + LiteX +
-   LiteDRAM) and boots BuildRoot Linux under Verilator, all from a single
-   `make all`.
+1. **Photon-pure optical link** ([`rtl/optical/`](rtl/optical/)) — 16 small
+   Verilog modules that model the *light path itself*: an array of DFB
+   lasers, MZ / microring modulators, a wavelength multiplexer, a silicon
+   waveguide with attenuation and propagation delay, an AWG demux with
+   inter-lambda crosstalk, photodetectors, transimpedance amplifiers, a
+   bang-bang clock-and-data-recovery loop, and a bit-error-rate counter.
+   Optical intensities flow through the chain as IEEE-754 reals; the only
+   transistor-domain logic in the link is the digital data going in and the
+   recovered data coming out.
+2. **WDM data-fabric module** ([`rtl/wdm_fabric.v`](rtl/wdm_fabric.v)) —
+   the synthesisable Wishbone-flavoured accelerator that an FPGA SoC can
+   actually instantiate. Same architectural pattern (N parallel
+   wavelengths, no contention) but with digital-only Verilog so it can ride
+   alongside a regular CPU.
+3. **Linux-capable RISC-V SoC** ([`sim/sim_linux.py`](sim/sim_linux.py)) —
+   the full LiteX + VexRiscv-SMP + LiteDRAM SoC that boots BuildRoot Linux
+   under Verilator on a stock Linux PC.
 
-> ⚠️  **What this repo is _not_:** It is not a real photonic chip and it does
-> not run at GHz wall-clock speed. Real silicon photonics needs custom
+A single `make all` exercises all three: it builds the toolchain, runs the
+photon-pure optical-link sim with BER measurement, runs the digital WDM
+fabric testbench, and boots Linux.
+
+> ⚠️  **What this repo is _not_:** Real silicon photonics needs custom
 > fabrication, lasers, modulators, and detectors that no PC simulator can
-> reproduce. What we *can* model in HDL — and what we do model — is the
-> *architectural pattern* that makes photonic interconnects fast: massive
-> parallelism on independent wavelength channels.
+> physically reproduce. The optical link in this repo is a **behavioural**
+> model: optical intensities are real numbers, time is in clock cycles,
+> and the DFB lasers / modulators / photodetectors are described by their
+> *I/O contract*, not their device physics. What you can do is read the
+> RTL, follow the chain end-to-end, watch real-valued waveforms in GTKWave,
+> and confirm bit-perfect recovery through PRBS+BER tests.
 
 ---
 
 ## Architecture
+
+### Photon-pure optical link (no transistor logic in the data path)
+
+```
+   +-------------+   +-----------+   +-----------+
+   | DFB laser 0 |-->|           |-->|           |
+   +-------------+   |           |   |           |
+   +-------------+   |  modulator|   | wavelength|
+   | DFB laser 1 |-->|    bank   |-->|    mux    |---+
+   +-------------+   |           |   |           |   |
+         ...         |  (8 MZs)  |   |  (8->1)   |   |
+   +-------------+   |           |   |           |   |
+   | DFB laser 7 |-->|           |-->|           |   |
+   +-------------+   +-----------+   +-----------+   |
+           ^               ^                         v
+         tx_data[7:0]      |               +------------------+
+                           |               |  optical waveg.  |
+                           |               |  (loss + delay)  |
+                           |               +------------------+
+                           |                         |
+                           |                         v
+                           |               +------------------+
+                           |               |   noise source   |
+                           |               | (shot + thermal) |
+                           |               +------------------+
+                           |                         |
+   +------------+    +------------+   +------------+ v
+   | rx_data[7] |<---|    CDR     |<--| photodet.  |<--+
+   |    ...     |    |  (3 stages,|   |  + TIA     |   | AWG
+   | rx_data[0] |<---|  bang-bang)|<--|  bank      |<--+ demux
+   +------------+    +------------+   +------------+   | (1->8)
+                            ^                          |
+                            +-- BER counter -----------+
+```
+
+* Light flows through the entire path as a real-valued intensity (0.0..1.0).
+* No CPU / no Wishbone / no register file in the data path itself.
+* `tx_data[k]` modulates the laser at wavelength λ_k via the MZ modulator.
+* All N lambdas share a single physical waveguide between the mux and
+  demux — that is the bandwidth-density advantage of WDM.
+
+### Linux-capable digital SoC (with the WDM fabric as a peripheral)
 
 ```
                 +------------------------------------------------+
@@ -138,7 +195,27 @@ make all
 4. `make sim-linux` &mdash; generates the SoC, runs Verilator, boots Linux
    to a `buildroot login:` prompt.
 
-### Inspect the photonic WDM waveform
+### Inspect the photon-pure optical link
+
+```bash
+make sim-optical    # produces dump_optical.vcd, runs PRBS+BER test
+make view-optical   # opens GTKWave with scripts/optical.gtkw preset
+```
+
+In GTKWave you will see, top-to-bottom for each lambda:
+
+* a flat-line CW laser intensity (1.0 when enabled),
+* a chopped-up modulator output (NRZ amplitude swing per bit),
+* the bus intensity as light traverses the waveguide (with attenuation),
+* a slightly-noisy version after the noise source,
+* the recovered intensity at the AWG demux output port,
+* the corresponding TIA voltage,
+* and finally the recovered digital `rx_data[k]` line.
+
+The testbench drives 8 independent PRBS-32 streams (one per lambda) and
+asserts that **0 bit errors** occur over the run, with the CDR locked.
+
+### Inspect the digital WDM waveform
 
 ```bash
 make sim-wdm    # produces dump.vcd
@@ -193,20 +270,40 @@ buildroot login: root
 
 ```
 .
-├── Makefile                top-level build with sim-linux / sim-wdm targets
+├── Makefile                top-level build with sim-linux / sim-wdm / sim-optical
 ├── README.md               this file
 ├── rtl/
-│   ├── wdm_fabric.v        photonic-inspired WDM fabric (NUM_LAMBDAS lanes)
-│   └── wdm_scheduler.v     round-robin pattern generator that drives the fabric
+│   ├── wdm_fabric.v        digital WDM fabric (NUM_LAMBDAS lanes)
+│   ├── wdm_scheduler.v     round-robin pattern generator for the fabric
+│   └── optical/            photon-pure optical link (real-valued analog model)
+│       ├── optical_constants.vh   parameters (powers, losses, threshold)
+│       ├── dfb_laser.v            single DFB laser (CW, fixed wavelength)
+│       ├── laser_array.v          N-element DFB laser bank
+│       ├── mz_modulator.v         Mach-Zehnder data modulator
+│       ├── ring_modulator.v       microring data modulator (alternative)
+│       ├── modulator_bank.v       N-lane modulator bank
+│       ├── wavelength_mux.v       N-to-1 wavelength MUX (combines lambdas)
+│       ├── optical_waveguide.v    silicon waveguide (loss + delay)
+│       ├── awg_demux.v            arrayed waveguide grating 1-to-N demux
+│       ├── ring_drop_filter.v     microring drop filter (alternative demux)
+│       ├── photodetector.v        Ge-on-Si photodetector + slicer
+│       ├── tia_amplifier.v        transimpedance amplifier
+│       ├── detector_bank.v        N-lane PD + TIA bank
+│       ├── cdr_recovery.v         clock-and-data recovery
+│       ├── ber_counter.v          bit-error-rate counter
+│       ├── noise_source.v         shot/thermal noise injector
+│       └── optical_link_top.v     top-level integration
 ├── tb/
-│   └── wdm_tb.v            Icarus testbench, dumps dump.vcd
+│   ├── wdm_tb.v            Icarus testbench for the digital WDM fabric
+│   └── optical_link_tb.v   Icarus testbench for the photon-pure optical link
 ├── sim/
 │   └── sim_linux.py        LiteX/Migen SoC + Verilator simulation script
 ├── scripts/
 │   ├── setup_litex.sh      installs LiteX into .venv + applies patches
 │   ├── fetch_images.sh     downloads pre-built Linux/OpenSBI images
 │   ├── run_sim.sh          launches the Verilator binary under unbuffer
-│   └── wdm.gtkw            GTKWave save file with all lambdas pre-loaded
+│   ├── wdm.gtkw            GTKWave save file for the digital WDM testbench
+│   └── optical.gtkw        GTKWave save file for the optical-link testbench
 └── docs/
     └── ARCHITECTURE.md     longer architecture / FPGA-portability notes
 ```
